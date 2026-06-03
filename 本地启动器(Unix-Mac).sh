@@ -47,6 +47,17 @@ else
     echo -e " - 核心依赖包 (node_modules): ${GREEN}已检出${NC} (状态: 正常)"
 fi
 
+# 2.5 自动检测并释放 3000 端口占用，防止后台进程残留导致端口被锁
+if command -v lsof &> /dev/null; then
+    LAUNCHER_STALE_PID=$(lsof -t -i:3000)
+    if [ ! -z "$LAUNCHER_STALE_PID" ]; then
+        echo -e "${YELLOW}[端口释放] 检测到旧的后台服务器 PID ${LAUNCHER_STALE_PID} 仍旧占用 3000 端口${NC}"
+        echo -e "           正在为您自动杀死后台残留进程，保障新工作区安全冷启动..."
+        kill -9 $LAUNCHER_STALE_PID 2>/dev/null
+        sleep 1
+    fi
+fi
+
 # 3. 启动本地服务
 echo -e "\n[启动服务] 正在在后台唤醒微型全栈专线容器..."
 echo -e " - 默认本地管理端端口: ${BLUE}http://localhost:3000${NC}"

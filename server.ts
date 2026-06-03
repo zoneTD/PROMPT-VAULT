@@ -440,6 +440,15 @@ async function startServer() {
     }
   });
 
+  // API Route: Graceful shutdown of the server process
+  app.post("/api/shutdown", (req, res) => {
+    res.json({ success: true, message: "服务器即将彻底终止并释放 3000 端口！" });
+    console.log("🛑 Received shutdown command from client. Shutting down system and releasing port 3000...");
+    setTimeout(() => {
+      process.exit(0);
+    }, 800);
+  });
+
   // Serve static files / Vite middleware integration
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

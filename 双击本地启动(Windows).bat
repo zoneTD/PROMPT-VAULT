@@ -49,6 +49,13 @@ if not exist "node_modules\" (
     echo - 核心依赖包 (node_modules): 已检出 (状态: 正常)
 )
 
+:: 2.5 自动检测并释放 3000 端口占用，防止后台进程残留导致端口被锁 (EADDRINUSE)
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :3000 ^| findstr LISTENING') do (
+    echo [端口释放] 检测到旧的后台管理进程 PID %%a 仍旧占用 3000 端口
+    echo             正在为您自动终结与释放端口，保障全新工作区无缝启动...
+    taskkill /f /pid %%a >nul 2>&1
+)
+
 :: 3. 启动本地开发/后台服务
 echo.
 echo [启动服务] 正在呼叫本地微型容器服务引擎...

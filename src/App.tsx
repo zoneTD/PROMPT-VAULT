@@ -219,6 +219,23 @@ export default function App() {
   const [tempStoragePath, setTempStoragePath] = useState(storagePath);
   const [importOption, setImportOption] = useState<"merge" | "overwrite">("merge");
   const [importStatus, setImportStatus] = useState<{ type: "success" | "error" | ""; msg: string }>({ type: "", msg: "" });
+  const [isSystemShutDown, setIsSystemShutDown] = useState(false);
+
+  const handleShutDownService = async () => {
+    if (!window.confirm("确定要终止后台服务和终结本地 Node.js 进程吗？\n\n关闭后：\n1. AI 标签抽取、智能反推等全栈服务将立即停用。\n2. 默认的 3000 端口会被瞬间释放，不会产生任何后台残留。\n\n如需再次使用，只需回到项目文件夹中，再次双击对应的启动器脚本即可！")) {
+      return;
+    }
+    try {
+      setIsSystemShutDown(true);
+      await fetch("/api/shutdown", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" }
+      });
+    } catch (err: any) {
+      // Immediate server death can cause fetch abort/rejections, which represent a successful termination exit!
+      setIsSystemShutDown(true);
+    }
+  };
 
   const getPathHashSuffix = (pathStr: string) => {
     const trimmed = (pathStr || "").trim();
@@ -873,6 +890,37 @@ export default function App() {
 
     return matchesSearch && matchesTag && matchesCollection;
   });
+
+  if (isSystemShutDown) {
+    return (
+      <div className="fixed inset-0 bg-[#020005] flex items-center justify-center p-4 z-9999 text-center font-sans select-none">
+        <div className="max-w-md w-full space-y-6 p-8 bg-[#0b0518] rounded-2xl border border-red-500/20 shadow-2xl relative">
+          <div className="absolute inset-0 bg-[linear-gradient(rgba(239,68,68,0.01)_1px,transparent_1px)] bg-[size:16px_16px] pointer-events-none rounded-2xl" />
+          <div className="w-16 h-16 bg-red-500/10 text-red-400 rounded-full flex items-center justify-center mx-auto text-3xl font-bold animate-pulse">
+            🛑
+          </div>
+          <div className="space-y-2.5">
+            <h2 className="text-lg font-black text-slate-100 tracking-wider">
+              系统后台服务已安全关闭/注销
+            </h2>
+            <p className="text-xs text-slate-350 leading-relaxed">
+              向微型全栈专线容器发送的 <span className="text-purple-400">process.exit(0)</span> 终止指令已被成功完全执行。
+              本地运行占用的 <span className="text-red-400">3000</span> 端口已彻底释放。
+            </p>
+            <div className="p-3 bg-black/60 rounded-xl text-[11px] text-start text-slate-400 space-y-1 font-mono border border-white/5">
+              <div>✓ 后端 API 服务器: 已关闭 (Terminated)</div>
+              <div>✓ 端口 3000 占用情况: 已释放 (Cleaned)</div>
+              <div>✓ 全栈开发实例: 完全终结 (Offline)</div>
+            </div>
+          </div>
+          <p className="text-xs text-slate-500 border-t border-purple-500/5 pt-4">
+            现在您可以放心地关闭本浏览器标签页以及相关的命令行/终端窗口。
+            下次启动使用，只需再次双击本地启动器脚本即可！
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!currentUser) {
     return (
@@ -2459,6 +2507,28 @@ export default function App() {
                   {importStatus.type === "success" ? "✓ " : "⚠️ "}{importStatus.msg}
                 </div>
               )}
+
+              {/* Process Shutdown Control Panel */}
+              <div className="bg-red-950/15 border border-red-500/10 p-4 rounded-xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-[11px] font-bold text-red-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <span>🛑 独立服务进程完全注销</span>
+                  </h4>
+                  <span className="text-[8px] px-1.5 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 font-bold font-mono">
+                    关闭终端
+                  </span>
+                </div>
+                <p className="text-[10px] text-slate-400 leading-normal">
+                  完成当下的艺术灵感图册整理后，如果您希望在关闭网页的同时，**彻底杀掉本地运行的 Node.js/Vite 后台程序并彻底释放 3000 端口**（避免占用电量与多余缓存），请安全呼叫此指令。
+                </p>
+                <button
+                  type="button"
+                  onClick={handleShutDownService}
+                  className="w-full py-2 bg-red-950/30 hover:bg-red-800/80 border border-red-500/20 text-red-300 font-bold hover:text-white rounded-xl text-[10px] transition-colors cursor-pointer tracking-wider"
+                >
+                  一键安全关闭并释放后台端口进程 (Shut Down Server)
+                </button>
+              </div>
 
               <div className="border-t border-purple-500/10 pt-3 flex justify-end">
                 <button
