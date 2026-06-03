@@ -1,0 +1,63 @@
+@echo off
+:: Set text encoding to UTF-8 to prevent Chinese rendering garbage characters
+chcp 65001 >nul
+title AI 提示词与图集管理器 - 本地极速启动器
+color 0b
+
+echo ==========================================================
+echo       AI 提示词与图集管理器 - 本地极速一键启动器
+echo ==========================================================
+echo [系统检测] 正在检查本地运行环境，请稍候...
+echo.
+
+:: 1. 检查 Node.js 是否已安装
+node -v >nul 2>&1
+if %errorlevel% neq 0 (
+    color 0c
+    echo 【错误】未检测到本地 Node.js 运行环境！
+    echo ----------------------------------------------------
+    echo 本管理系统基于 Node.js/Vite 架构运行，您需要安装 Node.js 才能在本地使用。
+    echo 请前往官方网站下载并安装 (推荐 LTS 长期支持版):
+    echo - 官网下载: https://nodejs.org/
+    echo ----------------------------------------------------
+    echo 安装完成后，请重新双击运行本启动器文件。
+    pause
+    exit
+)
+
+:: 显示检测到的 Node 版本
+for /f "tokens=*" %%i in ('node -v') do set NODE_VER=%%i
+echo - 检测到 Node.js 版本: %NODE_VER% (状态: 正常)
+
+:: 2. 检查依赖项的存在，如无则自动运行 npm install
+if not exist "node_modules\" (
+    echo.
+    echo 【提示】未检测到依赖库依赖包 (node_modules)，正在为您进行首次自动化安装...
+    echo 这是首次运行前的必要准备步骤，由于网络传输可能需要1-3分钟，请耐心等待...
+    echo ----------------------------------------------------
+    call npm install
+    if %errorlevel% neq 0 (
+        color 0c
+        echo.
+        echo 【错误】依赖安装失败！请检查您的网络连接或尝试手动执行 "npm install"。
+        pause
+        exit
+    )
+    echo ----------------------------------------------------
+    echo [状态] 所有核心依赖包已就绪！
+) else (
+    echo - 核心依赖包 (node_modules): 已检出 (状态: 正常)
+)
+
+:: 3. 启动本地开发/后台服务
+echo.
+echo [启动服务] 正在呼叫本地微型容器服务引擎...
+echo - 访问地址: http://localhost:3000
+echo - 稍后将自动为您在默认浏览器中开启本系统...
+echo ----------------------------------------------------
+
+:: 4. 延迟后自动在浏览器打开网页，并在后台保持运行 Node.js 进程
+start "" "http://localhost:3000"
+npm run dev
+
+pause
