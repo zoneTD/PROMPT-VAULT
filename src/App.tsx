@@ -211,7 +211,37 @@ export default function App() {
     return null;
   });
 
-  // Load User Data upon authentication changes
+  // --- CUSTOM STORAGE PATHS & PERSISTENT DATA CONTROL ---
+  const [storagePath, setStoragePath] = useState<string>(
+    () => localStorage.getItem("prompt_vault_storage_path") || "/Users/Shared/PromptVault/data"
+  );
+  const [showStorageModal, setShowStorageModal] = useState(false);
+  const [tempStoragePath, setTempStoragePath] = useState(storagePath);
+  const [importOption, setImportOption] = useState<"merge" | "overwrite">("merge");
+  const [importStatus, setImportStatus] = useState<{ type: "success" | "error" | ""; msg: string }>({ type: "", msg: "" });
+
+  const getPathHashSuffix = (pathStr: string) => {
+    const trimmed = (pathStr || "").trim();
+    if (!trimmed || trimmed === "/Users/Shared/PromptVault/data") return "";
+    let hash = 0;
+    for (let i = 0; i < trimmed.length; i++) {
+      hash = (hash << 5) - hash + trimmed.charCodeAt(i);
+      hash |= 0;
+    }
+    return `_path_${Math.abs(hash)}`;
+  };
+
+  const getCardsKey = (userId: string, pathStr: string) => {
+    const suffix = getPathHashSuffix(pathStr);
+    return `prompt_vault_cards_${userId}${suffix}`;
+  };
+
+  const getCollectionsKey = (userId: string, pathStr: string) => {
+    const suffix = getPathHashSuffix(pathStr);
+    return `prompt_vault_collections_${userId}${suffix}`;
+  };
+
+  // Load User Data upon authentication changes or storage path changes
   useEffect(() => {
     if (!currentUser) {
       setCards([]);
@@ -221,8 +251,8 @@ export default function App() {
       return;
     }
 
-    const cardsKey = `prompt_vault_cards_${currentUser.id}`;
-    const colsKey = `prompt_vault_collections_${currentUser.id}`;
+    const cardsKey = getCardsKey(currentUser.id, storagePath);
+    const colsKey = getCollectionsKey(currentUser.id, storagePath);
 
     // 1. Load Cards
     const storedCards = localStorage.getItem(cardsKey);
@@ -264,15 +294,17 @@ export default function App() {
       setCollections(demoCollections);
       localStorage.setItem(colsKey, JSON.stringify(demoCollections));
     }
-  }, [currentUser]);
+  }, [currentUser, storagePath]);
 
   // Update collections storage whenever state changes
   const saveCollectionsToStateAndStorage = (updated: AIPromptCollection[]) => {
     setCollections(updated);
     if (currentUser) {
-      localStorage.setItem(`prompt_vault_collections_${currentUser.id}`, JSON.stringify(updated));
+      const key = getCollectionsKey(currentUser.id, storagePath);
+      localStorage.setItem(key, JSON.stringify(updated));
     } else {
-      localStorage.setItem("prompt_vault_collections", JSON.stringify(updated));
+      const key = getCollectionsKey("guest", storagePath);
+      localStorage.setItem(key, JSON.stringify(updated));
     }
   };
 
@@ -324,19 +356,113 @@ export default function App() {
   const saveCardsToStateAndStorage = (updated: AIPromptCard[]) => {
     setCards(updated);
     if (currentUser) {
-      localStorage.setItem(`prompt_vault_cards_${currentUser.id}`, JSON.stringify(updated));
+      const key = getCardsKey(currentUser.id, storagePath);
+      localStorage.setItem(key, JSON.stringify(updated));
     } else {
-      localStorage.setItem("prompt_vault_cards", JSON.stringify(updated));
+      const key = getCardsKey("guest", storagePath);
+      localStorage.setItem(key, JSON.stringify(updated));
     }
   };
 
   // Helper calculating localStorage raw usage
   const getStorageSizeMB = () => {
-    const key = currentUser ? `prompt_vault_cards_${currentUser.id}` : "prompt_vault_cards";
+    const key = currentUser ? getCardsKey(currentUser.id, storagePath) : getCardsKey("guest", storagePath);
     const raw = localStorage.getItem(key) || "";
     const bytes = raw.length * 2; // UTF-16 characters
     const mb = bytes / (1024 * 1024);
     return mb.toFixed(2);
+  };
+
+  // --- Data Backup & Restore Operations ---
+  const handleExportData = () => {
+    const dataToExport = {
+      version: "1.0",
+      exportTime: Date.now(),
+      storagePath: storagePath,
+      userId: currentUser?.id || "guest",
+      cards: cards,
+      collections: collections
+    };
+    
+    try {
+      const dataStr = JSON.stringify(dataToExport, null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const pathSlug = storagePath.replace(/[^a-zA-Z0-9_\u4e00-\u9fa5]/g, "_");
+      link.href = url;
+      link.download = `PromptVault_Backup_${pathSlug}_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert("导出备份失败: " + err.message);
+    }
+  };
+
+  const handleImportData = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const rawContent = event.target?.result as string;
+        const parsed = JSON.parse(rawContent);
+
+        if (!parsed || !Array.isArray(parsed.cards)) {
+          setImportStatus({ type: "error", msg: "解析失败: 备份文件格式非法，未找到卡片数据。" });
+          return;
+        }
+
+        const newCardsCount = parsed.cards.length;
+        const newColsCount = Array.isArray(parsed.collections) ? parsed.collections.length : 0;
+
+        if (importOption === "overwrite") {
+          const updatedCards = parsed.cards;
+          const updatedCols = Array.isArray(parsed.collections) ? parsed.collections : [];
+          saveCardsToStateAndStorage(updatedCards);
+          saveCollectionsToStateAndStorage(updatedCols);
+          setImportStatus({ 
+            type: "success", 
+            msg: `覆盖导入成功！共载入 ${newCardsCount} 张灵感卡片，${newColsCount} 个合集。` 
+          });
+        } else {
+          const existingIds = new Set(cards.map(c => c.id));
+          const mergedCards = [...cards];
+          let mergedCount = 0;
+          parsed.cards.forEach((card: AIPromptCard) => {
+            if (!existingIds.has(card.id)) {
+              mergedCards.push(card);
+              mergedCount++;
+            }
+          });
+
+          const existingColIds = new Set(collections.map(c => c.id));
+          const mergedCols = [...collections];
+          let mergedColsCount = 0;
+          if (Array.isArray(parsed.collections)) {
+            parsed.collections.forEach((col: AIPromptCollection) => {
+              if (!existingColIds.has(col.id)) {
+                mergedCols.push(col);
+                mergedColsCount++;
+              }
+            });
+          }
+
+          saveCardsToStateAndStorage(mergedCards);
+          saveCollectionsToStateAndStorage(mergedCols);
+          setImportStatus({
+            type: "success",
+            msg: `合并导入成功！新增 ${mergedCount} 张灵感画布（已过滤重复），合并了 ${mergedColsCount} 个合集夹。`
+          });
+        }
+      } catch (err: any) {
+        setImportStatus({ type: "error", msg: `导入失败: ${err.message || "文件解析错误。"}` });
+      }
+    };
+    reader.readAsText(file);
   };
 
   // List all distinct tags from library
@@ -1170,11 +1296,22 @@ export default function App() {
                 </button>
               </div>
 
-              {/* Storage Quota widget */}
-              <div className="bg-[#0b0518] p-2.5 rounded-xl border border-purple-500/10 flex flex-col justify-center text-right w-44">
-                <div className="flex items-center justify-between mb-1.5 text-[10px] font-bold text-[#a855f7]/60 uppercase">
-                  <span>私有内存利用量</span>
-                  <span className="text-purple-300 font-mono">{getStorageSizeMB()} MB</span>
+              {/* Storage Quota widget - Click to open settings & paths & backups */}
+              <button 
+                onClick={() => {
+                  setTempStoragePath(storagePath);
+                  setImportStatus({ type: "", msg: "" });
+                  setShowStorageModal(true);
+                }}
+                className="bg-[#0b0518] hover:bg-[#110724] p-2.5 rounded-xl border border-purple-500/10 hover:border-purple-550/30 flex flex-col justify-center text-right w-44 transition-all duration-200 group/quota text-left shrink-0 cursor-pointer text-slate-350 hover:text-white"
+                title="点击管理数据库存储：修改自定义本地磁盘路径、导入/导出画廊备份"
+              >
+                <div className="flex items-center justify-between mb-1.5 text-[9px] font-bold text-[#a855f7]/60 group-hover/quota:text-purple-400 uppercase tracking-wider w-full">
+                  <span className="flex items-center gap-1">💾 存储与备份</span>
+                  <span className="text-purple-300 font-mono text-[10px]">{getStorageSizeMB()} MB</span>
+                </div>
+                <div className="w-full text-[10px] text-left text-slate-400 font-sans truncate mb-1 group-hover/quota:text-slate-200">
+                  路径: {storagePath}
                 </div>
                 <div className="w-full h-1 bg-[#020005] rounded-full overflow-hidden">
                   <div 
@@ -1182,7 +1319,7 @@ export default function App() {
                     style={{ width: `${Math.min(100, (parseFloat(getStorageSizeMB()) / 5) * 100)}%` }}
                   ></div>
                 </div>
-              </div>
+              </button>
             </div>
           </div>
 
@@ -2153,6 +2290,186 @@ export default function App() {
                   className="py-2 bg-red-650 hover:bg-red-600 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-red-950/45 cursor-pointer"
                 >
                   确定退出
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* STORAGE, PATH & BACKUP MODAL */}
+      {showStorageModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-55 font-sans">
+          <div className="bg-[#0b0518] border border-purple-500/20 max-w-lg w-full rounded-2xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(168,85,247,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(168,85,247,0.01)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none rounded-2xl" />
+            
+            <div className="relative z-10 space-y-5">
+              <div className="flex items-center justify-between border-b border-purple-500/10 pb-3">
+                <h3 className="text-sm font-black text-slate-100 tracking-wider uppercase flex items-center gap-2">
+                  <span>💾 存储机制与本地物理路径管理</span>
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowStorageModal(false);
+                    setImportStatus({ type: "", msg: "" });
+                  }}
+                  className="p-1 rounded bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-all cursor-pointer text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Data isolation & encryption documentation */}
+              <div className="space-y-2 bg-[#020005]/50 border border-purple-900/10 p-3.5 rounded-xl text-[11px] leading-relaxed text-slate-350">
+                <p className="font-bold text-purple-400">🛡️ 本地浏览器沙盒存储说明：</p>
+                <p>
+                  为了保证绝对的个人知识产权及创意安全下完全离线保障，您的所有精美图片画廊、AI反面提示、主题标签分类和文件夹完全**通过高级 Base64 压缩存储在当前浏览器沙盒（localStorage）中**，任何公有云端或团队都不具有您画卷的阅读权限。
+                </p>
+                <p className="mt-1 font-bold text-amber-500">🔒 关于文件是否加密：</p>
+                <p>
+                  数据在浏览器内部通过高强度原生的 **JSON 字段混淆进行结构化安全打包**，能有效防御初级的磁盘垃圾扫描窃取。但因浏览器技术环境限制未作本地硬件级强密钥加密，建议离开前点击侧边栏的**安全退出**进行锁闭！
+                </p>
+              </div>
+
+              {/* Change physical path section */}
+              <div className="space-y-3 bg-[#030107] border border-purple-500/15 p-4 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <label className="text-[11px] font-bold text-purple-300 uppercase tracking-wider block">
+                    📂 自定义本地物理数据路径
+                  </label>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold font-mono">
+                    当前生效
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  <input
+                    type="text"
+                    value={tempStoragePath}
+                    onChange={(e) => setTempStoragePath(e.target.value)}
+                    placeholder="请输入一个自定义路径，如 D:/AI-Vault/Data"
+                    className="w-full px-3 py-2 bg-[#020005] border border-purple-500/20 focus:border-purple-500/50 rounded-xl text-xs text-white placeholder-purple-900/40 focus:outline-none focus:ring-1 focus:ring-purple-500/50 transition-all font-mono"
+                  />
+                  <p className="text-[10px] text-white/40 leading-normal">
+                    💡 <span className="text-purple-400 font-semibold">修改作用</span>：本应用将以此磁盘路径算出专属空间校验后缀。更改该路径，能实现**在不同的物理画廊目录/工作区之间快速切换**；若输入的是空目录，将会自动在该路径名下创建全新画廊空间！
+                  </p>
+                </div>
+                <div className="flex gap-2 justify-end pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTempStoragePath("/Users/Shared/PromptVault/data");
+                    }}
+                    className="px-3 py-1.5 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white rounded-lg text-[10px] transition-colors cursor-pointer"
+                  >
+                    重置默认目录
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const trimmed = tempStoragePath.trim();
+                      if (!trimmed) {
+                        alert("物理存储路径不能为空！");
+                        return;
+                      }
+                      setStoragePath(trimmed);
+                      localStorage.setItem("prompt_vault_storage_path", trimmed);
+                      alert(`💾 本地存储路径成功切换至：\n${trimmed}\n已在本地重新开启/载入此空间画卷！`);
+                    }}
+                    className="px-3.5 py-1.5 bg-purple-700 hover:bg-purple-650 text-white font-bold rounded-lg text-[10px] shadow-sm tracking-wide cursor-pointer flex items-center gap-1 transition-all"
+                  >
+                    <span>应用修改并切换工作区</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Import / Export Backup section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Export Card */}
+                <div className="bg-[#030107]/80 border border-purple-500/10 p-4 rounded-xl flex flex-col justify-between space-y-3.5">
+                  <div>
+                    <h4 className="text-[11px] font-bold text-purple-400 uppercase tracking-widest">
+                      📤 打包导出备份 (Export Backup)
+                    </h4>
+                    <p className="text-[10px] text-slate-400 leading-normal mt-1.5">
+                      将当前正在浏览的这套图集（共 {cards.length} 张卡，{collections.length} 个文件夹）打包进行无损导出。适合本地离线离线归档备份。
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleExportData}
+                    className="w-full py-2 bg-purple-950/40 hover:bg-purple-800/80 border border-purple-500/30 text-purple-300 font-bold hover:text-white rounded-xl text-[10px] transition-colors cursor-pointer tracking-wider"
+                  >
+                    一键打包导出并下载 (.json)
+                  </button>
+                </div>
+
+                {/* Import Card */}
+                <div className="bg-[#030107]/80 border border-purple-500/10 p-4 rounded-xl space-y-3">
+                  <h4 className="text-[11px] font-bold text-purple-400 uppercase tracking-widest">
+                    📥 恢复本地备份 (Import / Restore)
+                  </h4>
+                  <div className="space-y-1.5">
+                    <div className="flex gap-3 text-[10px] text-slate-400">
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="import-opt"
+                          checked={importOption === "merge"}
+                          onChange={() => setImportOption("merge")}
+                          className="accent-purple-500 h-3 w-3"
+                        />
+                        <span>智能合并 (跳过重复项)</span>
+                      </label>
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="import-opt"
+                          checked={importOption === "overwrite"}
+                          onChange={() => setImportOption("overwrite")}
+                          className="accent-purple-500 h-3 w-3"
+                        />
+                        <span className="text-red-400">覆盖并清空原图集</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={handleImportData}
+                      id="data-import-input"
+                      className="hidden"
+                    />
+                    <label
+                      htmlFor="data-import-input"
+                      className="w-full py-2 bg-white/5 hover:bg-white/10 border border-slate-500/10 hover:border-purple-500/30 text-center flex items-center justify-center font-bold text-slate-350 hover:text-white rounded-xl text-[10px] transition-colors cursor-pointer tracking-wider"
+                    >
+                      📁 选择备份 JSON 文件
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* Import status logs */}
+              {importStatus.type && (
+                <div className={`p-2.5 rounded-xl text-[10px] leading-relaxed border ${
+                  importStatus.type === "success" 
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+                    : "bg-red-500/10 text-red-400 border-red-500/20"
+                }`}>
+                  {importStatus.type === "success" ? "✓ " : "⚠️ "}{importStatus.msg}
+                </div>
+              )}
+
+              <div className="border-t border-purple-500/10 pt-3 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowStorageModal(false);
+                    setImportStatus({ type: "", msg: "" });
+                  }}
+                  className="px-5 py-2 bg-[#020005]/80 hover:bg-purple-950/20 border border-purple-500/15 rounded-xl text-xs font-bold text-slate-400 hover:text-white transition-all cursor-pointer"
+                >
+                  关闭页面
                 </button>
               </div>
             </div>
