@@ -4,6 +4,21 @@ import { compressAndStoreImage } from "./utils";
 import { PromptCard } from "./components/PromptCard";
 import { CardDetailModal } from "./components/CardDetailModal";
 import { AuthPortal } from "./components/AuthPortal";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy
+} from "@dnd-kit/sortable";
 import { 
   Plus, 
   Search, 
@@ -11,6 +26,7 @@ import {
   Tag as TagIcon, 
   Trash2, 
   Grid, 
+  LayoutGrid,
   SlidersHorizontal,
   ChevronRight,
   ChevronDown,
@@ -50,6 +66,33 @@ export default function App() {
   const [cards, setCards] = useState<AIPromptCard[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [galleryLayout, setGalleryLayout] = useState<"complete" | "compact">(
+    () => (localStorage.getItem("gallery_layout_mode") as "complete" | "compact") || "complete"
+  );
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = cards.findIndex((item) => item.id === active.id);
+    const newIndex = cards.findIndex((item) => item.id === over.id);
+
+    if (oldIndex !== -1 && newIndex !== -1) {
+      const updated = arrayMove(cards, oldIndex, newIndex);
+      saveCardsToStateAndStorage(updated);
+    }
+  };
   
   // UI Tabs & Sidebar Modes
   const [activeTab, setActiveTab] = useState<"gallery" | "add-manual" | "add-ai">("gallery");
@@ -1098,17 +1141,47 @@ export default function App() {
               </p>
             </div>
             
-            {/* Storage Quota widget */}
-            <div className="bg-[#0b0518] p-2.5 rounded-lg border border-purple-500/10 flex flex-col text-right w-44 sm:self-auto self-start">
-              <div className="flex items-center justify-between mb-1.5 text-[10px] font-bold text-[#a855f7]/60 uppercase">
-                <span>私有内存利用量</span>
-                <span className="text-purple-300 font-mono">{getStorageSizeMB()} MB</span>
+            <div className="flex flex-wrap items-center gap-3.5 sm:self-auto self-start shrink-0">
+              {/* Layout switcher buttons */}
+              <div className="flex bg-[#0b0518] p-1 rounded-xl border border-purple-500/10 gap-1 select-none items-center shrink-0">
+                <button 
+                  onClick={() => { setGalleryLayout("complete"); localStorage.setItem("gallery_layout_mode", "complete"); }}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 uppercase tracking-wide cursor-pointer ${
+                    galleryLayout === "complete" 
+                      ? "bg-purple-700 text-white shadow-md shadow-purple-950/40" 
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                  title="完整卡片详细分析（带主体、主题标签及详细时间等）"
+                >
+                  <LayoutGrid size={12} />
+                  <span>完整卡片</span>
+                </button>
+                <button 
+                  onClick={() => { setGalleryLayout("compact"); localStorage.setItem("gallery_layout_mode", "compact"); }}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 uppercase tracking-wide cursor-pointer ${
+                    galleryLayout === "compact" 
+                      ? "bg-purple-700 text-white shadow-md shadow-purple-950/40" 
+                      : "text-slate-400 hover:text-white"
+                  }`}
+                  title="紧凑型正方形大图流（极致紧凑纯手绘感图集馆）"
+                >
+                  <Grid size={12} />
+                  <span>紧凑画廊</span>
+                </button>
               </div>
-              <div className="w-full h-1 bg-[#020005] rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-purple-600 rounded-full transition-all duration-505"
-                  style={{ width: `${Math.min(100, (parseFloat(getStorageSizeMB()) / 5) * 100)}%` }}
-                ></div>
+
+              {/* Storage Quota widget */}
+              <div className="bg-[#0b0518] p-2.5 rounded-xl border border-purple-500/10 flex flex-col justify-center text-right w-44">
+                <div className="flex items-center justify-between mb-1.5 text-[10px] font-bold text-[#a855f7]/60 uppercase">
+                  <span>私有内存利用量</span>
+                  <span className="text-purple-300 font-mono">{getStorageSizeMB()} MB</span>
+                </div>
+                <div className="w-full h-1 bg-[#020005] rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-purple-600 rounded-full transition-all duration-505"
+                    style={{ width: `${Math.min(100, (parseFloat(getStorageSizeMB()) / 5) * 100)}%` }}
+                  ></div>
+                </div>
               </div>
             </div>
           </div>
@@ -1987,16 +2060,32 @@ export default function App() {
                 </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                {filteredCards.map((card) => (
-                  <PromptCard 
-                    key={card.id}
-                    card={card}
-                    onDelete={handleDeleteCard}
-                    onSelect={(selected) => setViewDetailCard(selected)}
-                  />
-                ))}
-              </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={filteredCards.map((c) => c.id)}
+                  strategy={rectSortingStrategy}
+                >
+                  <div className={
+                    galleryLayout === "compact"
+                      ? "grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4"
+                      : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"
+                  }>
+                    {filteredCards.map((card) => (
+                      <PromptCard 
+                        key={card.id}
+                        card={card}
+                        onDelete={handleDeleteCard}
+                        onSelect={(selected) => setViewDetailCard(selected)}
+                        layoutMode={galleryLayout}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
             )}
           </div>
         </main>
