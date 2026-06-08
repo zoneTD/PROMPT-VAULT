@@ -1,5 +1,5 @@
 @echo off
-:: Set text encoding to UTF-8 to prevent Chinese rendering garbage characters
+rem Set console encoding to UTF-8 to display Chinese text correctly
 chcp 65001 >nul
 title AI 提示词与图集管理器 - 本地极速启动器
 color 0b
@@ -10,7 +10,7 @@ echo ==========================================================
 echo [系统检测] 正在检查本地运行环境，请稍候...
 echo.
 
-:: 1. 检查 Node.js 是否已安装
+rem Check if Node.js is installed
 node -v >nul 2>&1
 if %errorlevel% neq 0 (
     color 0c
@@ -25,11 +25,11 @@ if %errorlevel% neq 0 (
     exit
 )
 
-:: 显示检测到的 Node 版本
+rem Get Node.js version
 for /f "tokens=*" %%i in ('node -v') do set NODE_VER=%%i
 echo - 检测到 Node.js 版本: %NODE_VER% (状态: 正常)
 
-:: 2. 检查依赖项的存在，如无则自动运行 npm install
+rem Check if node_modules exists, if not run npm install
 if not exist "node_modules\" (
     echo.
     echo 【提示】未检测到依赖库依赖包 (node_modules)，正在为您进行首次自动化安装...
@@ -49,21 +49,21 @@ if not exist "node_modules\" (
     echo - 核心依赖包 (node_modules): 已检出 (状态: 正常)
 )
 
-:: 2.5 自动检测并释放 3000 端口占用，防止后台进程残留导致端口被锁 (EADDRINUSE)
+rem Release port 3000 if occupied to prevent EADDRINUSE errors
 for /f "tokens=5" %%a in ('netstat -ano ^| findstr :3000 ^| findstr LISTENING') do (
     echo [端口释放] 检测到旧的后台管理进程 PID %%a 仍旧占用 3000 端口
     echo             正在为您自动终结与释放端口，保障全新工作区无缝启动...
     taskkill /f /pid %%a >nul 2>&1
 )
 
-:: 3. 启动本地开发/后台服务
+rem Start modern local server dev environment
 echo.
 echo [启动服务] 正在呼叫本地微型容器服务引擎...
 echo - 访问地址: http://localhost:3000
 echo - 稍后将自动为您在默认浏览器中开启本系统...
 echo ----------------------------------------------------
 
-:: 4. 延迟后自动在浏览器打开网页，并在后台保持运行 Node.js 进程
+rem Launch browser after a short delay and run dev server
 start "" "http://localhost:3000"
 npm run dev
 

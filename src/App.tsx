@@ -39,7 +39,11 @@ import {
   Info,
   Folder,
   FolderPlus,
-  LogOut
+  LogOut,
+  Scale,
+  Columns,
+  Sun,
+  Moon
 } from "lucide-react";
 
 // Prepopulated sample cards to demo the design right away
@@ -70,6 +74,16 @@ export default function App() {
     () => (localStorage.getItem("gallery_layout_mode") as "complete" | "compact") || "complete"
   );
 
+  const [theme, setTheme] = useState<"dark" | "light">(() => {
+    return (localStorage.getItem("app_theme") as "dark" | "light") || "dark";
+  });
+
+  useEffect(() => {
+    localStorage.setItem("app_theme", theme);
+  }, [theme]);
+
+  const isDark = theme === "dark";
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -97,6 +111,26 @@ export default function App() {
   // UI Tabs & Sidebar Modes
   const [activeTab, setActiveTab] = useState<"gallery" | "add-manual" | "add-ai">("gallery");
   const [viewDetailCard, setViewDetailCard] = useState<AIPromptCard | null>(null);
+
+  // --- COMPARE MODE STATES ---
+  const [isCompareMode, setIsCompareMode] = useState(false);
+  const [compareCardIds, setCompareCardIds] = useState<string[]>([]);
+  const [showComparisonModal, setShowComparisonModal] = useState(false);
+
+  const handleCompareCardSelect = (card: AIPromptCard) => {
+    setCompareCardIds(prev => {
+      if (prev.includes(card.id)) {
+        return prev.filter(id => id !== card.id);
+      } else {
+        if (prev.length < 2) {
+          return [...prev, card.id];
+        } else {
+          // Keep second and add new one
+          return [prev[1], card.id];
+        }
+      }
+    });
+  };
 
   // States for manual custom API settings
   const [customProvider, setCustomProvider] = useState<"gemini" | "openai">(() => {
@@ -934,14 +968,22 @@ export default function App() {
   }
 
   return (
-    <div className="w-full min-h-screen bg-[#020005] text-slate-200 flex flex-col font-sans overflow-x-hidden antialiased selection:bg-purple-550/30 selection:text-white">
+    <div className={`w-full min-h-screen flex flex-col font-sans overflow-x-hidden antialiased transition-colors duration-200 ${
+      isDark 
+        ? "bg-[#03000b] text-[#cbd5e1] selection:bg-purple-950/40 selection:text-white" 
+        : "bg-[#f8fafc] text-[#334155] selection:bg-purple-100 selection:text-purple-900"
+    }`}>
       
       {/* HEADER SECTION */}
-      <header className="h-16 border-b border-purple-500/10 flex items-center justify-between px-4 sm:px-6 bg-[#070311] sticky top-0 z-30 shadow-lg">
+      <header className={`h-16 border-b flex items-center justify-between px-4 sm:px-6 sticky top-0 z-30 shadow-md backdrop-blur-md transition-colors duration-200 ${
+        isDark 
+          ? "border-purple-500/10 bg-[#070311]/90 text-white" 
+          : "border-slate-200 bg-white/95 text-slate-800"
+      }`}>
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => { setSelectedTag(null); setActiveTab("gallery"); }}>
           <div className="w-8 h-8 bg-purple-700 rounded-lg flex items-center justify-center font-black text-white italic tracking-tighter text-sm shadow-[0_0_12px_rgba(168,85,247,0.4)]">AI</div>
-          <span className="font-extrabold text-base tracking-widest text-slate-100 uppercase font-mono sm:block hidden">
-            PROMPT<span className="text-purple-400">VAULT</span>
+          <span className={`font-extrabold text-base tracking-widest uppercase font-mono sm:block hidden ${isDark ? "text-slate-100" : "text-slate-800"}`}>
+            PROMPT<span className="text-purple-500 animate-pulse">VAULT</span>
           </span>
         </div>
         
@@ -953,13 +995,19 @@ export default function App() {
               placeholder="按提示词、图像属性或归纳标签搜索图集..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full bg-[#020005]/60 border border-purple-500/10 rounded-full py-1.5 pl-10 pr-4 text-xs font-medium text-slate-100 placeholder-slate-500 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-550/30 transition-all font-mono"
+              className={`w-full rounded-full py-1.5 pl-10 pr-4 text-xs font-semibold focus:outline-none focus:ring-1 transition-all font-mono ${
+                isDark 
+                  ? "bg-[#020005]/60 border border-purple-500/10 text-slate-100 placeholder-slate-500 focus:border-purple-500/55 focus:ring-[#8b5cf6]/20" 
+                  : "bg-slate-50 border border-slate-200 text-slate-800 placeholder-slate-400 focus:border-purple-450 focus:ring-purple-400/20"
+              }`}
             />
-            <Search className="w-4 h-4 absolute left-3.5 text-slate-500" />
+            <Search className="w-4 h-4 absolute left-3.5 text-slate-450" />
             {searchQuery && (
               <button 
                 onClick={() => setSearchQuery("")}
-                className="absolute right-3 text-xs text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 rounded-full px-1.5 py-0.5"
+                className={`absolute right-3 text-[10px] font-bold rounded-full px-1.5 py-0.5 transition-all cursor-pointer ${
+                  isDark ? "text-slate-400 hover:text-white bg-white/5 hover:bg-white/10" : "text-[#475569] hover:text-[#1e293b] bg-slate-200 hover:bg-slate-300"
+                }`}
               >
                 清除
               </button>
@@ -969,6 +1017,20 @@ export default function App() {
 
         {/* Global Toolbar buttons */}
         <div className="flex items-center gap-2 sm:gap-4">
+          {/* Theme switcher toggle button */}
+          <button
+            type="button"
+            onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            className={`p-2 rounded-lg border transition-all cursor-pointer focus:outline-none flex items-center justify-center ${
+              isDark 
+                ? "bg-white/5 border-white/5 hover:bg-white/10 text-amber-400" 
+                : "bg-slate-50 border-slate-201 border-slate-200 hover:bg-slate-100 text-purple-600 hover:border-slate-300"
+            }`}
+            title={isDark ? "切换为明亮模式" : "切换为暗黑模式"}
+          >
+            {isDark ? <Sun size={14} className="animate-spin-slow text-amber-400" /> : <Moon size={14} className="text-purple-600" />}
+          </button>
+
           {/* 手动保存 Button & Dropdown Drop Menu */}
           <div className="relative hidden sm:block">
             <button 
@@ -993,8 +1055,14 @@ export default function App() {
                   className="fixed inset-0 z-40" 
                   onClick={() => setAddDropdownOpen(false)}
                 />
-                <div className="absolute right-0 mt-2 w-64 bg-[#0a0518] border border-purple-500/10 rounded-xl shadow-2xl py-1.5 z-55 text-xs font-semibold animate-scale-in">
-                  <div className="px-3 py-1.5 text-[9px] font-bold text-white/30 uppercase tracking-widest border-b border-light-purple-500/5 mb-1 select-none">
+                <div className={`absolute right-0 mt-2 w-64 border rounded-xl shadow-2xl py-1.5 z-55 text-xs font-semibold animate-scale-in ${
+                  isDark 
+                    ? "bg-[#0a0518] border-purple-500/15 text-slate-300" 
+                    : "bg-white border-slate-200 text-slate-700 shadow-xl"
+                }`}>
+                  <div className={`px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest border-b mb-1 select-none ${
+                    isDark ? "text-white/30 border-white/5" : "text-slate-400 border-slate-100"
+                  }`}>
                     选择录入卡片类型
                   </div>
                   <button
@@ -1003,12 +1071,16 @@ export default function App() {
                       setActiveTab("add-manual");
                       setAddDropdownOpen(false);
                     }}
-                    className={`w-full text-left px-3.5 py-2.5 hover:bg-white/[0.04] transition-colors flex items-center gap-2.5 ${manualAddMode === "draw" && activeTab === "add-manual" ? "text-purple-400 bg-white/[0.02]" : "text-slate-300"}`}
+                    className={`w-full text-left px-3.5 py-2.5 transition-colors flex items-center gap-2.5 ${
+                      isDark 
+                        ? `hover:bg-white/[0.04] ${manualAddMode === "draw" && activeTab === "add-manual" ? "text-purple-400 bg-white/[0.02]" : "text-slate-300"}` 
+                        : `hover:bg-slate-50 ${manualAddMode === "draw" && activeTab === "add-manual" ? "text-purple-700 bg-purple-50/50" : "text-slate-650 text-slate-600"}`
+                    }`}
                   >
                     <span className="text-base">🎨</span>
                     <div className="flex flex-col">
                       <span className="font-bold">AI 绘图提示词卡片</span>
-                      <span className="text-[10px] text-white/40 font-normal">核心绘图 Prompt (可配图)</span>
+                      <span className={`text-[10px] font-normal ${isDark ? "text-white/40" : "text-slate-400"}`}>核心绘图 Prompt (可配图)</span>
                     </div>
                   </button>
                   <button
@@ -1017,12 +1089,16 @@ export default function App() {
                       setActiveTab("add-manual");
                       setAddDropdownOpen(false);
                     }}
-                    className={`w-full text-left px-3.5 py-2.5 hover:bg-white/[0.04] transition-colors flex items-center gap-2.5 ${manualAddMode === "system" && activeTab === "add-manual" ? "text-purple-400 bg-white/[0.02]" : "text-slate-300"}`}
+                    className={`w-full text-left px-3.5 py-2.5 transition-colors flex items-center gap-2.5 ${
+                      isDark 
+                        ? `hover:bg-white/[0.04] ${manualAddMode === "system" && activeTab === "add-manual" ? "text-purple-400 bg-white/[0.02]" : "text-slate-300"}` 
+                        : `hover:bg-slate-50 ${manualAddMode === "system" && activeTab === "add-manual" ? "text-purple-700 bg-purple-50/50" : "text-slate-650 text-slate-600"}`
+                    }`}
                   >
                     <span className="text-base">🤖</span>
                     <div className="flex flex-col">
                       <span className="font-bold">单个 AI 提示词 / 系统主指令</span>
-                      <span className="text-[10px] text-white/40 font-normal">角色的核心 System/AI Prompt</span>
+                      <span className={`text-[10px] font-normal ${isDark ? "text-white/40" : "text-slate-400"}`}>角色的核心 System/AI Prompt</span>
                     </div>
                   </button>
                   <button
@@ -1031,12 +1107,16 @@ export default function App() {
                       setActiveTab("add-manual");
                       setAddDropdownOpen(false);
                     }}
-                    className={`w-full text-left px-3.5 py-2.5 hover:bg-white/[0.04] transition-colors flex items-center gap-2.5 ${manualAddMode === "skill" && activeTab === "add-manual" ? "text-purple-400 bg-white/[0.02]" : "text-slate-300"}`}
+                    className={`w-full text-left px-3.5 py-2.5 transition-colors flex items-center gap-2.5 ${
+                      isDark 
+                        ? `hover:bg-white/[0.04] ${manualAddMode === "skill" && activeTab === "add-manual" ? "text-purple-400 bg-white/[0.02]" : "text-slate-300"}` 
+                        : `hover:bg-slate-50 ${manualAddMode === "skill" && activeTab === "add-manual" ? "text-purple-700 bg-purple-50/50" : "text-slate-650 text-slate-600"}`
+                    }`}
                   >
                     <span className="text-base">⚡</span>
                     <div className="flex flex-col">
                       <span className="font-bold">SKILL 提示词 / 技能微操规则</span>
-                      <span className="text-[10px] text-white/40 font-normal">风格组或专属技能规则微操指导</span>
+                      <span className={`text-[10px] font-normal ${isDark ? "text-white/40" : "text-slate-400"}`}>风格组或专属技能规则微操指导</span>
                     </div>
                   </button>
                 </div>
@@ -1048,8 +1128,10 @@ export default function App() {
             onClick={() => setActiveTab(activeTab === "add-ai" ? "gallery" : "add-ai")}
             className={`flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 rounded-lg uppercase tracking-wider transition-all duration-200 cursor-pointer ${
               activeTab === "add-ai" 
-                ? "bg-purple-700 text-white shadow-[0_0_15px_rgba(168,85,247,0.3)] animate-pulse" 
-                : "bg-purple-500/10 hover:bg-purple-550/20 text-purple-400 border border-purple-500/20"
+                ? "bg-purple-700 text-white shadow-[0_0_15px_rgba(168,85,247,0.3)]" 
+                : (isDark 
+                    ? "bg-purple-500/10 hover:bg-purple-550/20 text-purple-400 border border-purple-500/20" 
+                    : "bg-purple-550/5 hover:bg-purple-100 text-purple-700 border border-purple-150 shadow-2xs")
             }`}
           >
             <Sparkles size={14} />
@@ -1059,7 +1141,11 @@ export default function App() {
           {/* Universal Safe Logout button */}
           <button
             onClick={() => setShowLogoutConfirm(true)}
-            className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all duration-200 bg-red-955/20 hover:bg-red-650 hover:text-white border border-red-500/20 text-red-400 cursor-pointer shadow-sm shadow-red-950/20"
+            className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all duration-200 cursor-pointer shadow-sm ${
+              isDark 
+                ? "bg-red-955/20 hover:bg-red-650 hover:text-white border border-red-500/20 text-red-400 shadow-red-950/20" 
+                : "bg-red-50 hover:bg-red-600 hover:text-white border border-red-200 text-red-600 shadow-2xs"
+            }`}
             title="安全退出当前帐户并自动锁库"
           >
             <LogOut size={14} />
@@ -1072,24 +1158,28 @@ export default function App() {
       <div className="flex-1 flex max-w-[1700px] w-full mx-auto overflow-hidden">
         
         {/* SIDEBAR NAVIGATION - LEFT */}
-        <nav className="w-60 border-r border-purple-500/10 p-5 hidden lg:flex flex-col gap-6 bg-[#05020c]/90 shrink-0">
+        <nav className={`w-60 border-r p-5 hidden lg:flex flex-col gap-6 shrink-0 transition-colors duration-200 ${
+          isDark ? "border-purple-500/10 bg-[#05020c]/90 text-white" : "border-slate-200 bg-white text-slate-800"
+        }`}>
           {/* Main Control Panel */}
           <div>
-            <p className="text-[10px] uppercase tracking-widest text-[#a855f7]/40 font-bold mb-3 px-2">主控面板</p>
+            <p className={`text-[10px] uppercase tracking-widest font-bold mb-3 px-2 ${isDark ? "text-[#a855f7]/40" : "text-purple-605 text-purple-600/70"}`}>主控面板</p>
             <ul className="space-y-1">
               <li>
                 <button
                   onClick={() => { setActiveTab("gallery"); setSelectedTag(null); setSelectedCollectionId(null); }}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                     activeTab === "gallery" && !selectedTag && !selectedCollectionId
-                      ? "bg-purple-500/10 text-purple-400 border border-purple-500/15" 
-                      : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.02]"
+                      ? (isDark ? "bg-purple-500/10 text-purple-400 border border-purple-500/15" : "bg-[#f3e8ff] text-purple-750 border border-purple-200") 
+                      : (isDark ? "text-slate-400 hover:text-slate-200 hover:bg-white/[0.02]" : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/50")
                   }`}
                 >
                   <span className="flex items-center gap-2.5">
                     <span>📋</span> 所有提示词备份
                   </span>
-                  <span className="bg-[#020005]/80 text-[10px] text-slate-400 px-2 py-0.5 rounded-md font-mono border border-purple-500/10">
+                  <span className={`text-[10px] px-2 py-0.5 rounded-md font-mono border ${
+                    isDark ? "bg-[#020005]/80 text-slate-400 border-purple-500/10" : "bg-slate-100 text-slate-650 border-slate-200"
+                  }`}>
                     {cards.length}
                   </span>
                 </button>
@@ -1099,7 +1189,7 @@ export default function App() {
 
           {/* Subfolders Collections Section */}
           <div className="flex flex-col gap-3">
-            <p className="text-[10px] uppercase tracking-widest text-[#a855f7]/40 font-bold px-2">
+            <p className={`text-[10px] uppercase tracking-widest font-bold px-2 ${isDark ? "text-[#a855f7]/40" : "text-purple-605 text-purple-600/70"}`}>
               整理合集子文件夹 (COLLECTIONS)
             </p>
             
@@ -1132,7 +1222,9 @@ export default function App() {
                             e.stopPropagation();
                             setConfirmCollectionDeleteId(null);
                           }}
-                          className="text-slate-400 hover:text-white px-1 py-0.5 font-bold cursor-pointer transition-colors"
+                          className={`px-1 py-0.5 font-bold cursor-pointer transition-colors ${
+                            isDark ? "text-slate-400 hover:text-white" : "text-slate-550 hover:text-[#0f172a]"
+                          }`}
                         >
                           否
                         </button>
@@ -1142,7 +1234,7 @@ export default function App() {
                 }
 
                 return (
-                  <div key={coll.id} className="group/folder flex items-center justify-between gap-1 rounded-lg hover:bg-white/[0.02]">
+                  <div key={coll.id} className={`group/folder flex items-center justify-between gap-1 rounded-lg ${isDark ? "hover:bg-white/[0.02]" : "hover:bg-slate-100/40"}`}>
                     <button
                       onClick={() => {
                         setActiveTab("gallery");
@@ -1151,15 +1243,19 @@ export default function App() {
                       }}
                       className={`flex-1 flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-semibold tracking-wide transition-all text-left cursor-pointer ${
                         isActive
-                          ? "text-purple-400 font-extrabold"
-                          : "text-slate-400 hover:text-slate-200"
+                          ? (isDark ? "text-purple-400 font-extrabold" : "text-purple-750 font-black")
+                          : (isDark ? "text-slate-400 hover:text-slate-200" : "text-slate-600 hover:text-slate-900")
                       }`}
                     >
                       <span className="flex items-center gap-2 truncate max-w-[130px]">
-                        <Folder size={12} className={isActive ? "text-purple-400 fill-purple-400/20" : "text-slate-500"} />
+                        <Folder size={12} className={isActive ? (isDark ? "text-purple-400 fill-purple-400/20" : "text-purple-600 fill-purple-600/10") : (isDark ? "text-slate-500" : "text-slate-400")} />
                         <span>{coll.name}</span>
                       </span>
-                      <span className="bg-[#020005]/80 text-[9px] text-slate-555 px-1.5 py-0.2 rounded font-mono border border-purple-500/10 group-hover/folder:border-white/10">
+                      <span className={`text-[9px] px-1.5 py-0.2 rounded font-mono border ${
+                        isDark 
+                          ? "bg-[#020005]/80 text-slate-400 border-purple-500/10 group-hover/folder:border-white/10" 
+                          : "bg-slate-100 text-slate-600 border-slate-200 group-hover/folder:border-slate-300"
+                      }`}>
                         {coll.cardIds.length}
                       </span>
                     </button>
@@ -1180,13 +1276,15 @@ export default function App() {
               })}
               
               {collections.length === 0 && (
-                <p className="text-[10px] text-slate-600 italic px-2">暂无整理合集文件夹。</p>
+                <p className={`text-[10px] italic px-2 ${isDark ? "text-slate-600" : "text-slate-400"}`}>暂无整理合集文件夹。</p>
               )}
             </div>
 
             {/* Micro inline collection creation form */}
             <div className="px-2 pt-1">
-              <div className="flex gap-1.5 items-center bg-[#020005]/85 border border-purple-500/10 rounded-md p-1">
+              <div className={`flex gap-1.5 items-center border rounded-md p-1 ${
+                isDark ? "bg-[#020005]/85 border-purple-500/10" : "bg-white border-slate-250 border-slate-200"
+              }`}>
                 <input
                   type="text"
                   placeholder="+ 新建子合集..."
@@ -1198,12 +1296,16 @@ export default function App() {
                       handleCreateCollection();
                     }
                   }}
-                  className="bg-transparent border-none text-[10px] text-slate-200 placeholder-purple-900/60 focus:outline-none w-full px-1 font-sans"
+                  className={`bg-transparent border-none text-[10px] focus:outline-none w-full px-1 font-sans ${
+                    isDark ? "text-slate-200 placeholder-purple-900/60" : "text-slate-700 placeholder-slate-400 font-medium"
+                  }`}
                 />
                 <button
                   type="button"
                   onClick={handleCreateCollection}
-                  className="p-1 text-slate-400 hover:text-purple-400 transition-colors cursor-pointer text-[10px] bg-white/5 hover:bg-purple-550/15 rounded font-black leading-none"
+                  className={`p-1 transition-colors cursor-pointer text-[10px] rounded font-black leading-none ${
+                    isDark ? "text-slate-400 hover:text-purple-400 bg-white/5 hover:bg-purple-555/15" : "text-slate-500 hover:text-purple-700 bg-slate-50 hover:bg-slate-100 border border-slate-200"
+                  }`}
                   title="确认创建"
                 >
                   确定
@@ -1215,17 +1317,17 @@ export default function App() {
           
           {/* Tag Cloud filter */}
           <div className="flex-1">
-            <p className="text-[10px] uppercase tracking-widest text-[#a855f7]/40 font-bold mb-3 px-2">标签快速检索 (STYLE FILTERS)</p>
+            <p className={`text-[10px] uppercase tracking-widest font-bold mb-3 px-2 ${isDark ? "text-[#a855f7]/40" : "text-purple-600/70"}`}>标签快速检索 (STYLE FILTERS)</p>
             {getAllUniqueTags().length === 0 ? (
-              <p className="text-slate-600 text-[11px] italic px-2">暂无可用分类标签...</p>
+              <p className={`text-[11px] italic px-2 ${isDark ? "text-slate-600" : "text-slate-400 font-medium"}`}>暂无可用分类标签...</p>
             ) : (
               <div className="flex flex-wrap gap-2 px-2 max-h-[300px] overflow-y-auto custom-scrollbar">
                 <span 
                   onClick={() => setSelectedTag(null)}
-                  className={`px-2.5 py-1 rounded text-[11px] font-mono cursor-pointer transition-colors ${
+                  className={`px-2.5 py-1 rounded text-[11px] font-mono cursor-pointer transition-all border ${
                     selectedTag === null 
-                      ? "bg-purple-500/20 text-purple-400 border border-purple-400/30" 
-                      : "bg-[#020005]/80 border border-purple-500/10 text-slate-400 hover:text-white"
+                      ? (isDark ? "bg-purple-500/20 text-[#d8b4fe] border border-purple-400/30" : "bg-purple-100 text-purple-750 border border-purple-300 font-bold") 
+                      : (isDark ? "bg-[#020005]/80 border border-purple-500/10 text-slate-400 hover:text-white" : "bg-white border border-slate-200 text-[#475569] hover:text-[#0f172a] hover:border-slate-350")
                   }`}
                 >
                   * 全部重置
@@ -1236,8 +1338,8 @@ export default function App() {
                     onClick={() => setSelectedTag(tag === selectedTag ? null : tag)}
                     className={`px-2.5 py-1 rounded text-[11px] font-mono cursor-pointer transition-all border ${
                       selectedTag === tag 
-                        ? "bg-purple-500/20 text-purple-400 border border-purple-500/40 shadow-xs" 
-                        : "bg-[#020005]/80 border-purple-500/10 text-slate-400 hover:text-white hover:border-white/10"
+                        ? (isDark ? "bg-purple-500/20 text-purple-355 text-purple-300 border border-[#a855f7]/40 shadow-xs animate-scale-in" : "bg-[#f3e8ff] text-purple-705 text-purple-800 border-purple-350 shadow-2xs font-extrabold animate-scale-in") 
+                        : (isDark ? "bg-[#020005]/80 border border-purple-500/10 text-slate-400 hover:text-white hover:border-white/10" : "bg-white border border-slate-200 text-[#475569] hover:text-[#0f172a] hover:border-slate-350")
                     }`}
                   >
                     #{tag}
@@ -1248,24 +1350,30 @@ export default function App() {
           </div>
 
           {/* User Account Session Info */}
-          <div className="mt-auto pt-4 border-t border-purple-500/10 px-2 space-y-2">
-            <div className="flex items-center justify-between bg-white/[0.02] border border-purple-500/10 p-2 rounded-xl">
+          <div className={`mt-auto pt-4 border-t px-2 space-y-2 ${isDark ? "border-purple-500/10" : "border-slate-200"}`}>
+            <div className={`flex items-center justify-between border p-2 rounded-xl transition-all ${
+              isDark ? "bg-white/[0.02] border-purple-500/10" : "bg-slate-50 border-slate-200"
+            }`}>
               <div className="flex items-center gap-2 truncate">
-                <div className="w-7 h-7 rounded-lg bg-purple-500/10 border border-purple-500/20 flex items-center justify-center font-bold text-[10px] text-purple-400 font-mono shrink-0">
+                <div className={`w-7 h-7 rounded-lg border flex items-center justify-center font-bold text-[10px] font-mono shrink-0 transition-colors ${
+                  isDark ? "bg-purple-500/10 border-purple-500/20 text-purple-400" : "bg-purple-100 border-purple-200 text-purple-700"
+                }`}>
                   {currentUser?.email.slice(0, 2).toUpperCase()}
                 </div>
                 <div className="truncate flex flex-col justify-center">
-                  <span className="text-[10px] font-bold text-slate-350 truncate leading-none">
+                  <span className={`text-[10px] font-bold truncate leading-none ${isDark ? "text-slate-300" : "text-slate-700"}`}>
                     {currentUser?.email}
                   </span>
-                  <span className="text-[9px] text-[#a855f7] font-mono mt-1">
+                  <span className={`text-[9px] font-mono mt-1 ${isDark ? "text-[#a855f7]" : "text-purple-600"}`}>
                     当前私库已连接
                   </span>
                 </div>
               </div>
               <button
                 onClick={() => setShowLogoutConfirm(true)}
-                className="p-1.5 hover:bg-red-500/10 text-slate-500 hover:text-red-400 rounded-lg cursor-pointer transition-colors shrink-0"
+                className={`p-1.5 rounded-lg cursor-pointer transition-colors shrink-0 ${
+                  isDark ? "hover:bg-red-500/10 text-slate-500 hover:text-red-400" : "hover:bg-red-50 text-slate-500 hover:text-red-650"
+                }`}
                 title="安全退出并锁库"
               >
                 <LogOut size={13} />
@@ -1275,16 +1383,18 @@ export default function App() {
 
           {/* Secure Sandbox Status banner */}
           <div className="pt-2 px-2">
-            <div className="p-3.5 bg-purple-950/20 rounded-xl border border-purple-500/10 space-y-2">
-              <div className="flex items-center gap-2 text-[11px] text-[#a855f7] font-bold">
-                <FolderLock size={14} className="text-[#a855f7]" />
+            <div className={`p-3.5 rounded-xl border space-y-2 ${
+              isDark ? "bg-purple-955/10 border-purple-550/10" : "bg-purple-50/50 border-purple-150"
+            }`}>
+              <div className={`flex items-center gap-2 text-[11px] font-bold ${isDark ? "text-[#a855f7]" : "text-purple-700"}`}>
+                <FolderLock size={14} className={isDark ? "text-[#a855f7]" : "text-purple-600"} />
                 <span>100% 私人沙盒模式</span>
               </div>
-              <p className="text-[10px] text-slate-400 leading-relaxed">
+              <p className={`text-[10px] leading-relaxed ${isDark ? "text-slate-400" : "text-slate-500"}`}>
                 所有创作图片和提示词完美归于本地私人内存中。绝不上传、审查或向外界公开。
               </p>
-              <div className="flex items-center gap-1.5 text-[10px] text-purple-400">
-                <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-pulse"></div>
+              <div className={`flex items-center gap-1.5 text-[10px] ${isDark ? "text-purple-400" : "text-purple-605"}`}>
+                <div className={`w-1.5 h-1.5 rounded-full animate-pulse ${isDark ? "bg-purple-500" : "bg-purple-600"}`}></div>
                 本地私密储存有效
               </div>
             </div>
@@ -1292,23 +1402,31 @@ export default function App() {
         </nav>
 
         {/* MAIN DISPLAY REGION */}
-        <main className="flex-1 p-4 sm:p-6 overflow-y-auto custom-scrollbar flex flex-col gap-6 bg-[#020005]">
+        <main className={`flex-1 p-4 sm:p-6 overflow-y-auto custom-scrollbar flex flex-col gap-6 transition-colors duration-200 ${
+          isDark ? "bg-[#020005]" : "bg-slate-50"
+        }`}>
           
           {/* Header titles */}
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-purple-500/10 pb-4">
+          <div className={`flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b pb-4 transition-colors duration-200 ${
+            isDark ? "border-purple-500/10" : "border-slate-200"
+          }`}>
             <div>
-              <h2 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+              <h2 className={`text-xl font-bold tracking-tight flex items-center gap-2 ${
+                isDark ? "text-white" : "text-slate-800"
+              }`}>
                 {selectedCollectionId 
                   ? `合集: 📁 ${collections.find(col => col.id === selectedCollectionId)?.name || "安全合集"}`
                   : selectedTag 
                     ? `标签: #${selectedTag}` 
                     : "私密提示词保险库"
                 }
-                <span className="bg-purple-500/10 text-purple-400 text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-purple-500/15">
+                <span className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${
+                  isDark ? "bg-purple-500/10 text-purple-400 border-purple-500/15" : "bg-purple-50 text-purple-700 border-purple-200"
+                }`}>
                   Private Cloud
                 </span>
               </h2>
-              <p className="text-xs text-white/40 mt-1 select-none">
+              <p className={`text-xs mt-1 select-none ${isDark ? "text-white/40" : "text-slate-500 font-medium"}`}>
                 {cards.length === 0 
                   ? "目前暂无记录，可点击右侧反推工具一键生成您的首个画集备份！" 
                   : `当前共有 ${filteredCards.length} 项图集匹配条件，一一对应，安全存储。`}
@@ -1317,13 +1435,15 @@ export default function App() {
             
             <div className="flex flex-wrap items-center gap-3.5 sm:self-auto self-start shrink-0">
               {/* Layout switcher buttons */}
-              <div className="flex bg-[#0b0518] p-1 rounded-xl border border-purple-500/10 gap-1 select-none items-center shrink-0">
+              <div className={`p-1 rounded-xl border gap-1 select-none items-center shrink-0 flex ${
+                isDark ? "bg-[#0b0518] border-purple-500/10" : "bg-white border-slate-200 shadow-2xs"
+              }`}>
                 <button 
                   onClick={() => { setGalleryLayout("complete"); localStorage.setItem("gallery_layout_mode", "complete"); }}
                   className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 uppercase tracking-wide cursor-pointer ${
                     galleryLayout === "complete" 
                       ? "bg-purple-700 text-white shadow-md shadow-purple-950/40" 
-                      : "text-slate-400 hover:text-white"
+                      : (isDark ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-800")
                   }`}
                   title="完整卡片详细分析（带主体、主题标签及详细时间等）"
                 >
@@ -1335,7 +1455,7 @@ export default function App() {
                   className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1.5 uppercase tracking-wide cursor-pointer ${
                     galleryLayout === "compact" 
                       ? "bg-purple-700 text-white shadow-md shadow-purple-950/40" 
-                      : "text-slate-400 hover:text-white"
+                      : (isDark ? "text-slate-400 hover:text-white" : "text-slate-500 hover:text-slate-800")
                   }`}
                   title="紧凑型正方形大图流（极致紧凑纯手绘感图集馆）"
                 >
@@ -1344,6 +1464,32 @@ export default function App() {
                 </button>
               </div>
 
+              {/* Compare Mode Toggle Button */}
+              <button
+                onClick={() => {
+                  setIsCompareMode(!isCompareMode);
+                  setCompareCardIds([]); // Clear selection when toggling
+                }}
+                className={`px-3 py-1.5 rounded-xl text-[10px] font-bold transition-all flex items-center gap-1.5 uppercase tracking-wide cursor-pointer border h-[32px] ${
+                  isCompareMode 
+                    ? "bg-purple-700 border-purple-500 text-white shadow-md shadow-purple-950/40" 
+                    : (isDark 
+                        ? "bg-[#0b0518] border-purple-500/10 text-slate-400 hover:text-white hover:border-purple-500/20" 
+                        : "bg-white border-slate-200 text-slate-650 hover:text-[#0f172a] hover:border-purple-300 shadow-2xs")
+                }`}
+                title="开启对比模式：允许您选中两张画廊卡片并排对比提示词和描述，直观观察不同AI模型表现特征"
+              >
+                <Scale size={12} className={isCompareMode ? "animate-pulse text-white" : "text-[#a855f7]"} />
+                <span>对比模式</span>
+                {isCompareMode && (
+                  <span className={`ml-1 text-[9px] font-black px-1.5 py-0.5 rounded-md font-mono scale-90 ${
+                    isDark ? "bg-white text-purple-800" : "bg-purple-100 text-purple-750"
+                  }`}>
+                    {compareCardIds.length}/2
+                  </span>
+                )}
+              </button>
+
               {/* Storage Quota widget - Click to open settings & paths & backups */}
               <button 
                 onClick={() => {
@@ -1351,17 +1497,25 @@ export default function App() {
                   setImportStatus({ type: "", msg: "" });
                   setShowStorageModal(true);
                 }}
-                className="bg-[#0b0518] hover:bg-[#110724] p-2.5 rounded-xl border border-purple-500/10 hover:border-purple-550/30 flex flex-col justify-center text-right w-44 transition-all duration-200 group/quota text-left shrink-0 cursor-pointer text-slate-350 hover:text-white"
+                className={`p-2.5 rounded-xl border flex flex-col justify-center text-right w-44 transition-all duration-205 group/quota text-left shrink-0 cursor-pointer ${
+                  isDark 
+                    ? "bg-[#0b0518] hover:bg-[#110724] border-purple-500/10 hover:border-purple-550/30 text-slate-300 hover:text-white" 
+                    : "bg-white hover:bg-slate-50 border-slate-200 hover:border-purple-300 text-slate-700 shadow-2xs"
+                }`}
                 title="点击管理数据库存储：修改自定义本地磁盘路径、导入/导出画廊备份"
               >
-                <div className="flex items-center justify-between mb-1.5 text-[9px] font-bold text-[#a855f7]/60 group-hover/quota:text-purple-400 uppercase tracking-wider w-full">
+                <div className={`flex items-center justify-between mb-1.5 text-[9px] font-bold uppercase tracking-wider w-full ${
+                  isDark ? "text-[#a855f7]/60 group-hover/quota:text-purple-400" : "text-purple-650"
+                }`}>
                   <span className="flex items-center gap-1">💾 存储与备份</span>
-                  <span className="text-purple-300 font-mono text-[10px]">{getStorageSizeMB()} MB</span>
+                  <span className={`font-mono text-[10px] ${isDark ? "text-purple-300" : "text-purple-650"}`}>{getStorageSizeMB()} MB</span>
                 </div>
-                <div className="w-full text-[10px] text-left text-slate-400 font-sans truncate mb-1 group-hover/quota:text-slate-200">
+                <div className={`w-full text-[10px] text-left font-sans truncate mb-1 ${
+                  isDark ? "text-slate-400 group-hover/quota:text-slate-200" : "text-slate-550 group-hover/quota:text-slate-800"
+                }`}>
                   路径: {storagePath}
                 </div>
-                <div className="w-full h-1 bg-[#020005] rounded-full overflow-hidden">
+                <div className={`w-full h-1 rounded-full overflow-hidden ${isDark ? "bg-[#020005]" : "bg-slate-100"}`}>
                   <div 
                     className="h-full bg-purple-600 rounded-full transition-all duration-505"
                     style={{ width: `${Math.min(100, (parseFloat(getStorageSizeMB()) / 5) * 100)}%` }}
@@ -2195,6 +2349,52 @@ export default function App() {
 
           {/* GALLERY CONTENT GRID */}
           <div className="flex-1">
+            {/* Compare Mode Guidance Banner */}
+            {isCompareMode && (
+              <div className="mb-5 p-4 bg-purple-950/30 border border-purple-500/20 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 font-sans shadow-lg animate-scale-in">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">⚖️</span>
+                    <h3 className="font-bold text-xs text-purple-300 uppercase tracking-wider">
+                      提示词双向对比模式已激活
+                    </h3>
+                    <span className="text-[9px] bg-purple-505 bg-purple-500/10 text-purple-400 font-bold font-mono border border-purple-500/18 px-1.5 py-0.5 rounded">
+                      已选中 {compareCardIds.length} / 2
+                    </span>
+                  </div>
+                  <p className="text-[10.5px] text-slate-350 leading-relaxed">
+                    请在下方图集列表中**点击任意两张卡片**。系统将把它们的提示词与描述进行并排对齐展示，以便深入剖析和观察不同模型/参数下的表现特征。
+                  </p>
+                </div>
+                <div className="flex items-center gap-2.5 sm:self-center self-end">
+                  <button
+                    onClick={() => setCompareCardIds([])}
+                    disabled={compareCardIds.length === 0}
+                    className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 transition-colors disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+                  >
+                    重置选择
+                  </button>
+                  <button
+                    onClick={() => setShowComparisonModal(true)}
+                    disabled={compareCardIds.length < 2}
+                    className="px-4 py-1.5 bg-gradient-to-r from-purple-700 to-fuchsia-700 hover:from-purple-650 hover:to-fuchsia-650 text-white text-[10px] font-black rounded-lg shadow-lg tracking-wider transition-all disabled:opacity-45 disabled:cursor-not-allowed flex items-center gap-1.5 cursor-pointer uppercase h-[28px]"
+                  >
+                    <Columns size={12} className={compareCardIds.length === 2 ? "animate-pulse" : ""} />
+                    <span>立即并排对比</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setIsCompareMode(false);
+                      setCompareCardIds([]);
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-[10px] font-bold text-slate-400 hover:text-red-400 bg-white/5 hover:bg-red-500/10 border border-white/5 hover:border-red-500/20 transition-all cursor-pointer"
+                  >
+                    退出对比
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Active search or tag filters notification row */}
             {(searchQuery || selectedTag || selectedCollectionId) && (
               <div className="mb-5 p-3 bg-purple-950/25 border border-purple-500/15 rounded-xl flex items-center justify-between text-xs text-purple-300 font-sans">
@@ -2264,8 +2464,17 @@ export default function App() {
                         key={card.id}
                         card={card}
                         onDelete={handleDeleteCard}
-                        onSelect={(selected) => setViewDetailCard(selected)}
+                        onSelect={(selected) => {
+                          if (isCompareMode) {
+                            handleCompareCardSelect(selected);
+                          } else {
+                            setViewDetailCard(selected);
+                          }
+                        }}
                         layoutMode={galleryLayout}
+                        isCompareModeActive={isCompareMode}
+                        selectedForComparison={compareCardIds.includes(card.id)}
+                        theme={theme}
                       />
                     ))}
                   </div>
@@ -2298,6 +2507,7 @@ export default function App() {
           onUpdateCard={handleUpdateCard}
           collections={collections}
           onToggleCollection={handleToggleCollectionForCard}
+          theme={theme}
         />
       )}
 
@@ -2540,6 +2750,266 @@ export default function App() {
                   className="px-5 py-2 bg-[#020005]/80 hover:bg-purple-950/20 border border-purple-500/15 rounded-xl text-xs font-bold text-slate-400 hover:text-white transition-all cursor-pointer"
                 >
                   关闭页面
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* COMPACT & DETAILED DUAL COMPARISON MODAL */}
+      {showComparisonModal && (
+        <div className="fixed inset-0 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 z-55 font-sans animate-fade-in">
+          <div className={`border max-w-6xl w-full rounded-2xl p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar transition-colors ${
+            isDark ? "bg-[#0b0518] border-purple-500/20 text-white" : "bg-white border-slate-200 text-slate-800"
+          }`}>
+            <div className="absolute inset-0 bg-[linear-gradient(rgba(168,85,247,0.01)_1px,transparent_1px),linear-gradient(90deg,rgba(168,85,247,0.01)_1px,transparent_1px)] bg-[size:24px_24px] pointer-events-none rounded-2xl" />
+            
+            <div className="relative z-10 space-y-6">
+              {/* Modal Header */}
+              <div className={`flex items-center justify-between border-b pb-4 ${isDark ? "border-purple-500/10" : "border-slate-200"}`}>
+                <div>
+                  <h3 className={`text-base font-black tracking-wider uppercase flex items-center gap-2 ${isDark ? "text-slate-100" : "text-slate-800"}`}>
+                    <span>⚖️ AI 提示词与模型表现双向对比</span>
+                  </h3>
+                  <p className={`text-xs mt-1 ${isDark ? "text-slate-400" : "text-slate-500"}`}>
+                    并排观察、分析及对比两组人工智能绘画的实际提示策略和细节特征。
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowComparisonModal(false)}
+                  className={`p-1 rounded transition-all cursor-pointer text-xs px-2 py-1 ${
+                    isDark ? "bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white" : "bg-slate-100 hover:bg-slate-200 text-slate-600 hover:text-slate-800"
+                  }`}
+                >
+                  ✕ 关闭对比
+                </button>
+              </div>
+
+              {/* Side-by-side Comparison Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 divide-y md:divide-y-0 md:divide-x divide-purple-500/10">
+                {/* Find the two cards */}
+                {[0, 1].map((index) => {
+                  const cardId = compareCardIds[index];
+                  const card = cards.find(c => c.id === cardId);
+                  
+                  if (!card) {
+                    return (
+                      <div key={index} className="flex flex-col items-center justify-center min-h-[400px] text-center p-8 text-slate-500 font-mono text-xs border border-dashed border-purple-500/10 rounded-xl bg-black/40">
+                        <span>[ 对比位置 #{index + 1} 尚未选择 ]</span>
+                        <p className="text-[11px] text-slate-600 mt-2">请退出本弹窗并在图集中点击卡片进行填充</p>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={card.id} className="space-y-4 md:px-4 pt-4 md:pt-0">
+                      {/* Badge and Title */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono font-bold bg-purple-500/10 text-purple-400 px-2.5 py-0.5 rounded border border-purple-500/20">
+                          对比项 #{index + 1}
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          同步时间: {new Date(card.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+
+                      {/* Card Image */}
+                      <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-[#030107] border border-white/5 group shadow-inner">
+                        <img 
+                          src={card.imageUrl} 
+                          alt={card.prompt} 
+                          className="h-full w-full object-contain"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="absolute top-2 right-2 bg-black/70 px-2.5 py-1 rounded-lg text-[9px] text-purple-300 font-mono border border-white/5 backdrop-blur-xs">
+                          画廊原图
+                        </div>
+                      </div>
+
+                      {/* Prompt block with copy */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-purple-300 uppercase tracking-widest">
+                            🎨 AI 绘图正向提示词 (Prompt)
+                          </label>
+                          <button
+                            onClick={() => {
+                              navigator.clipboard.writeText(card.prompt);
+                              alert("💡 正向提示词已成功复制到剪贴板！");
+                            }}
+                            className="text-[10px] text-purple-400 hover:text-purple-300 flex items-center gap-1 cursor-pointer transition-colors"
+                          >
+                            <Copy size={10} />
+                            <span>复制提示词</span>
+                          </button>
+                        </div>
+                        <div className="p-3 bg-[#020005]/90 border border-purple-500/20 rounded-xl text-xs text-white leading-relaxed font-mono select-all overflow-y-auto whitespace-pre-wrap max-h-36 custom-scrollbar">
+                          {card.prompt}
+                        </div>
+                      </div>
+
+                      {/* Target Model & System/Skill prompt if exists */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-[11px] font-bold text-amber-500/90 uppercase tracking-widest">
+                            🤖 所选目标模型与核心指令 (Target Model & System Context)
+                          </label>
+                        </div>
+                        <div className="p-3 bg-[#020005]/95 border border-amber-500/10 rounded-xl text-xs text-amber-300 font-mono">
+                          {card.targetModel ? (
+                            <span className="font-bold text-slate-200">目标模型: <span className="text-amber-400">{card.targetModel}</span></span>
+                          ) : (
+                            <span className="text-slate-500 italic">[未设定特定目标模型/通用创作模型]</span>
+                          )}
+                          
+                          {card.singleAiPrompt && (
+                            <div className="mt-2 border-t border-white/5 pt-2">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-[10px] text-slate-400">主核心指令提示词:</span>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(card.singleAiPrompt || "");
+                                    alert("💡 主指令已成功复制到剪贴板！");
+                                  }}
+                                  className="text-[9px] text-[#a855f7] hover:underline"
+                                >
+                                  复制
+                                </button>
+                              </div>
+                              <p className="text-[11px] text-slate-300 max-h-20 overflow-y-auto custom-scrollbar select-all whitespace-pre-wrap">{card.singleAiPrompt}</p>
+                            </div>
+                          )}
+
+                          {card.skillPrompt && (
+                            <div className="mt-2 border-t border-white/5 pt-2">
+                              <div className="flex justify-between items-center mb-1">
+                                <span className="text-[10px] text-slate-400">个性化技能系统组:</span>
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(card.skillPrompt || "");
+                                    alert("💡 技能提示词已成功复制到剪贴板！");
+                                  }}
+                                  className="text-[9px] text-[#a855f7] hover:underline"
+                                >
+                                  复制
+                                </button>
+                              </div>
+                              <p className="text-[11px] text-slate-300 max-h-20 overflow-y-auto custom-scrollbar select-all whitespace-pre-wrap">{card.skillPrompt}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* AI Description/Analysis */}
+                      <div className="space-y-1.5">
+                        <label className="text-[11px] font-bold text-purple-300 uppercase tracking-widest block">
+                          📝 图像反推描述与效果分析
+                        </label>
+                        <div className="p-3 bg-purple-950/5 border border-purple-500/10 rounded-xl text-[11.5px] leading-relaxed text-slate-350 select-text">
+                          {card.description || <span className="text-slate-500 italic">[暂无对应的图像内容与模型效果描述]</span>}
+                        </div>
+                      </div>
+
+                      {/* Tags */}
+                      <div className="space-y-1.5">
+                        <span className="text-[11px] font-bold text-purple-300 uppercase tracking-widest block">
+                          🏷️ 属性标签归类 (Tags)
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {card.tags.length > 0 ? (
+                            card.tags.map((tag, idx) => (
+                              <span 
+                                key={idx} 
+                                className="px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-[10px] font-bold text-purple-400 uppercase tracking-wider"
+                              >
+                                #{tag}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-[10px] text-slate-600 font-mono italic">无标签</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Character length count / differences visual helper */}
+              {compareCardIds.length === 2 && (
+                <div className="bg-[#020005]/80 border border-purple-500/15 p-4 rounded-xl space-y-2.5 text-xs animate-scale-in">
+                  <h4 className="text-[11px] font-bold text-purple-400 uppercase tracking-widest">
+                    📊 提示词数据统计与差异特征比较 (Prompt Statistics & Intersection)
+                  </h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-slate-400 text-[11px]">
+                    <div className="bg-[#0b0518]/60 border border-purple-500/10 p-3 rounded-lg">
+                      <span className="block text-[10px] text-slate-500 uppercase font-bold tracking-wider">提示词字符长度对比 (Characters):</span>
+                      <div className="flex items-center gap-1.5 mt-1.5">
+                        <span className="text-white font-mono font-bold text-sm">
+                          {cards.find(c => c.id === compareCardIds[0])?.prompt.length ?? 0}
+                        </span>
+                        <span className="text-purple-550 font-bold">vs</span>
+                        <span className="text-white font-mono font-bold text-sm">
+                          {cards.find(c => c.id === compareCardIds[1])?.prompt.length ?? 0}
+                        </span>
+                        <span className="text-slate-500 text-[10px]">字符</span>
+                      </div>
+                    </div>
+                    <div className="bg-[#0b0518]/60 border border-purple-500/10 p-3 rounded-lg">
+                      <span className="block text-[10px] text-slate-500 uppercase font-bold tracking-wider">单词数量对比 (Word Count):</span>
+                      <div className="flex items-center gap-1.5 mt-1.5">
+                        <span className="text-white font-mono font-bold text-sm">
+                          {(cards.find(c => c.id === compareCardIds[0])?.prompt || "").split(/\s+/).filter(Boolean).length}
+                        </span>
+                        <span className="text-purple-550 font-bold">vs</span>
+                        <span className="text-white font-mono font-bold text-sm">
+                          {(cards.find(c => c.id === compareCardIds[1])?.prompt || "").split(/\s+/).filter(Boolean).length}
+                        </span>
+                        <span className="text-slate-500 text-[10px]">单词</span>
+                      </div>
+                    </div>
+                    <div className="bg-[#0b0518]/60 border border-purple-500/10 p-3 rounded-lg">
+                      <span className="block text-[10px] text-slate-500 uppercase font-bold tracking-wider">共同重合的主题标签 (Shared Tags):</span>
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {(() => {
+                          const c1 = cards.find(c => c.id === compareCardIds[0]);
+                          const c2 = cards.find(c => c.id === compareCardIds[1]);
+                          if (c1 && c2) {
+                            const intersection = c1.tags.filter(t => c2.tags.includes(t));
+                            if (intersection.length > 0) {
+                              return intersection.map((tag, i) => (
+                                <span key={i} className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/25 text-[9px] text-emerald-400 font-bold">
+                                  {tag}
+                                </span>
+                              ));
+                            }
+                          }
+                          return <span className="text-slate-600 font-mono">[无重合分类标签]</span>;
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Bottom footer button bar */}
+              <div className="border-t border-purple-500/10 pt-4 flex gap-3 justify-end">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCompareCardIds([]);
+                  }}
+                  className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-xs font-bold text-slate-400 hover:text-white transition-all cursor-pointer font-sans"
+                >
+                  重置选择 (Reset)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowComparisonModal(false)}
+                  className="px-6 py-2 bg-purple-700 hover:bg-purple-650 text-white font-bold rounded-xl text-xs tracking-wider transition-all cursor-pointer font-sans shadow-lg shadow-purple-950/40"
+                >
+                  关闭页面 (Close)
                 </button>
               </div>
             </div>
